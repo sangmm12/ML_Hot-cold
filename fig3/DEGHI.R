@@ -67,10 +67,6 @@ for(sample_name in c('TCGA_ICGC'))
   
   y_p = Fun(abs(min(as.numeric(predict(fit_plsr,type="lp",newdata=mixed[,-c(1,2,3)])))) + as.numeric(predict(fit_plsr,type="lp",newdata=mixed[,-c(1,2,3)])))
   
-  rs <- data.frame(Time=mixed$Time,Status=mixed$Status,RS1=x_p,RS2=y_p)
-  
-  Risk_scroe_temp <- summary(coxph(Surv(Time,Status)~RS1+RS2,rs))$coef[3]*x_p+summary(coxph(Surv(Time,Status)~RS1+RS2,rs))$coef[4]*y_p
-  
   threshold <- median(Risk_scroe_temp)
   
   risk <- data.frame(riskscore = Fun(Risk_scroe_temp)*100,group = risk_group <- ifelse((Risk_scroe_temp) > threshold, "High", "Low"),Status=mixed$Status,Time=mixed$Time/365)
@@ -122,33 +118,7 @@ for(sample_name in c('TCGA_ICGC'))
   dev.off()
   
   
-  
-  library(survminer)
-  rt=risk[order(risk$riskscore),]
-  diff=survdiff(Surv(Time, Status) ~ group,data = rt)
-  pValue=1-pchisq(diff$chisq,df=1)
-  pValue=signif(pValue,4)
-  pValue=format(pValue, scientific = TRUE)
-  fit <- survfit(Surv(Time, Status) ~ group, data = rt)
-  surPlot=ggsurvplot(fit,
-                     data=rt,
-                     #font.title = paste(connam[i],sep=''),
-                     #ggtitle = paste(connam[i],sep=''),
-                     #conf.int=TRUE,
-                     legend.labs=c( "L","H"),
-                     legend = "top",
-                     legend.title="Risk",
-                     pval=paste0("p=",pValue),
-                     pval.size=5,
-                     xlab="Time(years)",
-                     break.time.by = ceiling((max(rt$Time))/4),
-                     risk.table.title="",
-                     palette=c("#009E73","red"),
-                     risk.table=T,
-                     risk.table.height=.25,)
-  pdf(file=paste(name_fold,'/survival.pdf',sep=''),onefile = FALSE,width = 6,height =8)
-  print(surPlot)
-  dev.off()
+
 }
 #write.csv(final_list,file='riskRFTcell.csv',row.names=F)
 

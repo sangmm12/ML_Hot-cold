@@ -75,66 +75,6 @@
       
       
       
-      ########Boruta
-      library(Boruta)
-      library(survival)
-      
-      set.seed(123)
-      library(dplyr)
-      #sample_name <- 'TCGA_ICGC'
-      #genelist <- 'up'
-      all_sur_data <- fread(paste('D:/R/ML_PAAD/data1/AUCAtcga/DEGs&WGCNA/TPM_0.3_0.01_1_sec/0.6_0.2/sur/sur_',sample_name,'.csv',sep=''),header=T)
-      all_sur_data <- as.data.frame(all_sur_data)
-      my_data <- fread(paste('D:/R/ML_PAAD/data1/AUCAtcga/DEGs&WGCNA/TPM_0.3_0.01_1_sec/0.6_0.2/',genelist,'/data',genelist,'/exp_',sample_name,'_HRp.csv',sep=''), header = T)
-      gene_exp <- as.data.frame(my_data)
-      
-      
-      mixed <- merge(gene_exp, all_sur_data, by = "SampleName")
-      
-      rownames(mixed) <- mixed$SampleName
-      
-      time <- mixed$Time
-      status <- mixed$Status
-      
-      mixed <- select(mixed,-c(SampleName,Time,Status))
-      
-      features <- mixed
-      
-      surv_object <- Surv(time = time, event = status)
-      
-      boruta_result <- Boruta(features, surv_object)
-      
-      selected_features <- getSelectedAttributes(boruta_result,withTentative = TRUE)
-      
-      Fun <- function(x){
-        return ((x - min(x))/(max(x)-min(x)))
-      }
-      
-      Boruta_imp <- attStats(boruta_result)[order(attStats(boruta_result)$meanImp),]
-      BORUTA_order <- data.frame(BORUTA=Fun(Boruta_imp$meanImp),gene=rownames(Boruta_imp))
-      
-      save(BORUTA_order,file='BORUTA_order.Rdata')
-      
-      pdf('boruta_importance.pdf',width = 20,height=10)
-      par(oma=c(3,3,3,3)) 
-      plot(boruta_result,las=2,xlab='')
-      legend(x = 'topleft', 
-             legend = c(paste('P-value:',boruta_result$pValue),sep=''),
-             lty = 0,
-             bty = 'n')
-      dev.off()
-      
-      pdf('boruta_history.pdf',width = 24,height=10)
-      par(oma=c(3,3,3,3)) 
-      plot(plotImpHistory(boruta_result),las=2)
-      legend(x = 'topleft', 
-             legend = c(paste('P-value:',boruta_result$pValue),sep=''),
-             lty = 0,
-             bty = 'n')
-      dev.off()
-      
-      
-      
       #############randomforest
       #sample_name <- 'TCGA_ICGC'
       
@@ -160,11 +100,7 @@
       
       library(randomForestSRC)
       library(survival)
-      
-      set.seed(123456)
-      
-      
-      
+       
       v.obj <- rfsrc(Surv(Time,Status)~.,data = mixed_train,
                      mtry=3,
                      nodesize=5,
@@ -194,9 +130,7 @@
       RF_order <- data.frame(RF=Fun(out.rf$varselect$vimp),gene=rownames(out.rf$varselect))
       
       save(RF_order,file='RF_order.Rdata')
-      colnames(mixed)
-      var_out<- data.frame(vimp=out.rf$varselect$vimp,group=rownames(out.rf$varselect))
-      
+       
       pdf('randomforest_vimp.pdf',width=13,height=5)
       
       library(ggplot2)
@@ -313,64 +247,7 @@
       
       
       
-      
-      
-      #########XGboost
-      library(survival)
-      library(xgboost)
-      library(Matrix)
-      library(xgboostExplainer)
-      library(timeROC)
-      library(dplyr)
-      library(survminer)
-      
-      set.seed(2)
-      all_sur_data <- fread(paste('D:/R/ML_PAAD/data1/AUCAtcga/DEGs&WGCNA/TPM_0.3_0.01_1_sec/0.6_0.2/sur/sur_',sample_name,'.csv',sep=''),header=T)
-      all_sur_data <- as.data.frame(all_sur_data)
-      my_data <- fread(paste('D:/R/ML_PAAD/data1/AUCAtcga/DEGs&WGCNA/TPM_0.3_0.01_1_sec/0.6_0.2/',genelist,'/data',genelist,'/exp_',sample_name,'_HRp.csv',sep=''), header = T)
-      gene_exp <- as.data.frame(my_data)
-      
-      mixed <- merge(gene_exp, all_sur_data, by = "SampleName")
-      rownames(mixed) <- mixed$SampleName
-      mixed <- na.omit(mixed)
-      gene_list <- colnames(mixed)
-      
-      mixed <- as.data.frame(apply(mixed,2,function(x) as.numeric(as.character(x))))
-      colnames(mixed) <- gene_list
-      mixed <- cbind(data.frame(status = mixed$Status),mixed)
-      mixed <- select(mixed,-c(SampleName))
-      
-      mixed_train <- mixed#[ 1:86, ]
-      mixed_test <- mixed#[ 87:nrow(mixed), ]
-      mixed_full <- mixed
-      
-      train_status <- mixed_train$Status
-      test_status <- mixed_test$Status
-      full_status <- mixed_full$Status
-      
-      train_time <- mixed_train$Time
-      test_time <- mixed_test$Time
-      full_time <- mixed_full$Time
-      
-      mixed_train <- select(mixed_train,-c(Status,Time))
-      mixed_test <- select(mixed_test,-c(Status,Time))
-      mixed_full <- select(mixed_full,-c(Status,Time))
-      #xgb_data <- xgb.DMatrix(data = as.matrix(features), label = as.matrix(status))
-      
-      dtrain <- xgb.DMatrix(as.matrix(mixed_train), label = train_time,weight = train_status)
-      dtest <- xgb.DMatrix(as.matrix(mixed_test), label = test_time, weight = test_status)
-      dfull <- xgb.DMatrix(as.matrix(mixed_full), label = full_time, weight = full_status)
-      
-      
-      params <- list(
-        objective = "survival:cox",
-        eval_metric = "cox-nloglik",
-        eta = 0.01,
-        max_depth = 3,
-        subsample = 0.8,
-        colsample_bytree = 0.8
-      )
-      
+
       # 运行XGBoost模型
       set.seed(123)
       xgb_model <- xgb.train(params = params,nrounds = 100,dtrain)

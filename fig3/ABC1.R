@@ -157,39 +157,6 @@ for (direction in c("both", "backward", "forward")) {
 }
 
 
-#### Lasso,Ridge,Enet ####
-for (alpha in seq(0,1,0.1)) {
-  set.seed(seed)
-  fit <- cv.glmnet(as.matrix(mixed[,-c(1,2,3)]), as.matrix(Surv(mixed$OS.time,mixed$OS)),family = "cox",alpha=alpha,nfolds = 10)
-  predict_comb = function(x)
-  {
-    as.numeric(predict(fit,type='link',newx=as.matrix(x[,-c(1,2,3)]),s=fit$lambda.min))
-  }
-  predict_x = function(x)
-  {
-    rs <- cbind(x[,2:3],RS = as.numeric(predict(fit,type='link',newx=as.matrix(x[,-c(1,2,3)]),s=fit$lambda.min)))
-    summary(coxph(Surv(OS.time,OS)~RS,rs))$concordance[1]
-  }
-  temp_vector = c()
-  for(i in names(list_data))
-  {
-    temp_vector = append(temp_vector,eval(parse(text=paste0('lapply(list_data,predict_x)$',i))))
-  }
-  final_result = rbind(final_result,temp_vector)
-  rownames(final_result) = c(rownames(final_result)[1:(length(rownames(final_result))-1)],c(paste0('Enet','[a=',alpha,']',sep='')))
-  if(alpha == 0)
-  {
-    rownames(final_result) = c(rownames(final_result)[1:(length(rownames(final_result))-1)],c('Ridge'))
-    RS_RIDGE <- lapply(list_data,predict_comb)
-  }
-  if(alpha == 1) 
-  {
-    rownames(final_result) = c(rownames(final_result)[1:(length(rownames(final_result))-1)],c('Lasso'))
-    RS_LASSO <- lapply(list_data,predict_comb)
-  }
-  rm(list=c('fit','predict_comb','temp_vector'))
-}
-
 
 #### Survival SVM ####
 fit <- survivalsvm(Surv(OS.time,OS)~., data= mixed[,-c(1)], gamma.mu = 1)
@@ -252,7 +219,6 @@ rm(list=c('fit','predict_comb','temp_vector'))
 #### Supervised principal components ####
 data <- list(x=t(mixed[,-c(1,2,3)]),y=mixed$OS.time,censoring.status=mixed$OS,featurenames=colnames(mixed)[-c(1,2,3)])
 set.seed(seed)
-fit <- superpc.train(data = data,type = 'survival',s0.perc = 0.5) #default
 set.seed(seed)
 cv.fit <- superpc.cv(fit,data,n.threshold = 20,#default
                      n.fold = SPCnfold,
@@ -279,33 +245,6 @@ RS_SPC = lapply(list_data,predict_comb)
 final_result = rbind(final_result,temp_vector)
 rownames(final_result) = c(rownames(final_result)[1:(length(rownames(final_result))-1)],c('Supervised PCA'))
 rm(list=c('fit','predict_comb','temp_vector'))
-
-
-
-#### plsRcox ####
-set.seed(seed)
-pdf('plsRcox.pdf')
-cv.plsRcox.res=cv.plsRcox(list(x=mixed[,-c(1,2,3)],time=mixed$OS.time,status=mixed$OS),nt=10,verbose = FALSE)
-fit <- plsRcox(mixed[,-c(1,2,3)],time=mixed$OS.time,event=mixed$OS,nt=as.numeric(cv.plsRcox.res[5]))
-predict_comb = function(x)
-{
-  as.numeric(predict(fit,type="lp",newdata=x[,-c(1,2,3)]))
-}
-predict_x = function(x)
-{
-  rs <- cbind(x[,2:3],RS=as.numeric(predict(fit,type="lp",newdata=x[,-c(1,2,3)])))
-  summary(coxph(Surv(OS.time,OS)~RS,rs))$concordance[1]
-}
-RS_PLS = lapply(list_data,predict_comb)
-temp_vector = c()
-for(i in names(list_data))
-{
-  temp_vector = append(temp_vector,eval(parse(text=paste0('lapply(list_data,predict_x)$',i))))
-}
-final_result = rbind(final_result,temp_vector)
-rownames(final_result) = c(rownames(final_result)[1:(length(rownames(final_result))-1)],c('plsRcox'))
-rm(list=c('fit','predict_comb','temp_vector'))
-dev.off()
 
 
 #ANN
@@ -352,11 +291,6 @@ for (max in seq(1,10,1)) {
     colsample_bytree = 0.8
   )
   xgb_model <- xgb.train(params = params,nrounds = 100,dtrain)
-  predict_comb = function(x)
-  {
-    dtest <- xgb.DMatrix(as.matrix(x[,-c(1,2,3)]), label = x$OS.time,weight = x$OS)
-    predict(xgb_model,dtest)
-  }
   predict_x = function(x)
   {
     dtest <- xgb.DMatrix(as.matrix(x[,-c(1,2,3)]), label = x$OS.time,weight = x$OS)
@@ -408,30 +342,6 @@ for(i in names(list_data))
 }
 final_result = rbind(final_result,temp_vector)
 rownames(final_result) = c(rownames(final_result)[1:(length(rownames(final_result))-1)],c(paste0('Survival RF')))
-
-
-#ANN + Random survival forest
-set.seed(seed)
-for (max in seq(5,15,1)) {
-  fit <- neuralnet(OS ~ ., data=mixed[,-c(1,3)], hidden=max)
-  while(length(fit)<14)
-  {
-    fit <- neuralnet(OS ~ ., data=mixed[,-c(1,3)], hidden=max)
-  }
-  predict_x = function(x)
-  {
-    rs <- cbind(x[,2:3],RS1=as.numeric(predict(fit_rf,newdata = x[,-c(1)])$predicted),RS2=predict(fit,newdata = x[,-c(1,3)]))
-    summary(coxph(Surv(OS.time,OS)~RS1+RS2,rs))$concordance[1]
-  }
-  temp_vector = c()
-  for(i in names(list_data))
-  {
-    temp_vector = append(temp_vector,eval(parse(text=paste0('lapply(list_data,predict_x)$',i))))
-  }
-  final_result = rbind(final_result,temp_vector)
-  rownames(final_result) = c(rownames(final_result)[1:(length(rownames(final_result))-1)],c(paste('Survival RF + ANN [hidden=',max,']',sep='')))
-  rm(list=c('fit'))
-}
 
 
 #GBDT + Random survival forest
@@ -505,12 +415,7 @@ cv.fit <- superpc.cv(fit,data,n.threshold = 20,#default
                      max.features=nrow(data$x),
                      compute.fullcv= TRUE,
                      compute.preval=TRUE)
-RS_SPC <- data.frame(RS = as.numeric(superpc.predict(fit,data,list(x=t(mixed[,-c(1,2,3)]),y=mixed$OS.time,censoring.status=mixed$OS,featurenames=colnames(mixed)[-c(1,2,3)]),threshold = cv.fit$thresholds[which.max(cv.fit[["scor"]][1,])],n.components = 1)$v.pred),name = "Supervised principal components")
-predict_x = function(x)
-{
-  rs <- cbind(x[,2:3],RS1=as.numeric(predict(fit_rf,newdata = x[,-c(1)])$predicted),RS2=as.numeric(superpc.predict(fit,data,list(x=t(x[,-c(1,2,3)]),y=x$OS.time,censoring.status=x$OS,featurenames=colnames(x)[-c(1,2,3)]),threshold = cv.fit$thresholds[which.max(cv.fit[["scor"]][1,])],n.components = 1)$v.pred))
-  summary(coxph(Surv(OS.time,OS)~RS1+RS2,rs))$concordance[1]
-}
+
 temp_vector = c()
 for(i in names(list_data))
 {
@@ -544,35 +449,6 @@ rm(list=c('fit'))
 dev.off()
 
 
-
-
-#XGboost + Random survival forest
-set.seed(seed)
-dtrain <- xgb.DMatrix(as.matrix(mixed[,-c(1,2,3)]), label = mixed$OS.time,weight = mixed$OS)
-for (max in seq(1,5,1)) {
-  params <- list(
-    objective = "survival:cox",
-    eval_metric = "cox-nloglik",
-    eta = 0.01,
-    max_depth = max,
-    subsample = 0.8,
-    colsample_bytree = 0.8
-  )
-  xgb_model <- xgb.train(params = params,nrounds = 100,dtrain)
-  predict_x = function(x)
-  {
-    dtest <- xgb.DMatrix(as.matrix(x[,-c(1,2,3)]), label = x$OS.time,weight = x$OS)
-    rs <- cbind(x[,2:3],RS1=as.numeric(predict(fit_rf,newdata = x[,-c(1)])$predicted),RS2=predict(xgb_model,dtest))
-    summary(coxph(Surv(OS.time,OS)~RS1+RS2,rs))$concordance[1]
-  }
-  temp_vector = c()
-  for(i in names(list_data))
-  {
-    temp_vector = append(temp_vector,eval(parse(text=paste0('lapply(list_data,predict_x)$',i))))
-  }
-  final_result = rbind(final_result,temp_vector)
-  rownames(final_result) = c(rownames(final_result)[1:(length(rownames(final_result))-1)],c(paste0('Survival RF + XGboost [max_depth=',max,']')))
-}
 
 
 #Lasso + Random survival forest
